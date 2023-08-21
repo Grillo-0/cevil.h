@@ -79,7 +79,7 @@ cevil_tk* next_tk(cevil_expr *expr) {
 		expr->base++;
 		tk->as.lhs = next_tk(expr);
 	} else {
-		fprintf(stderr, "unexpected charcter '%c'\n", *expr->base);
+		fprintf(stderr, "error: Unexpected charcter '%c'\n", *expr->base);
 		exit(-1);
 	}
 
@@ -156,7 +156,7 @@ double cevil_eval(char *input) {
 	eval(expr.root);
 
 	if (expr.root->evaluated == false) {
-		fprintf(stderr, "Could not evaluate expression \"%s\" \n",
+		fprintf(stderr, "error: Could not evaluate expression \"%s\" \n",
 			input);
 		exit(-1);
 	}
