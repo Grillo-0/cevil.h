@@ -11,6 +11,8 @@ double cevil_eval(char *expr);
 #include <stdlib.h>
 #include <string.h>
 
+typedef size_t tkid_t;
+
 enum cevil_tk_type {
 	CEVIL_NUM_TK,
 	CEVIL_PLUS_TK,
@@ -24,8 +26,8 @@ struct cevil_tk;
 typedef union {
 	double number;
 	struct {
-		struct cevil_tk *rhs;
-		struct cevil_tk *lhs;
+		tkid_t rhs;
+		tkid_t lhs;
 	};
 } cevil_as;
 
@@ -37,58 +39,95 @@ typedef struct cevil_tk {
 } cevil_tk;
 
 typedef struct {
-	char* base;
-	struct cevil_tk *root;
+	cevil_tk *arr;
+	size_t len;
+	size_t capacity;
+} tk_storage;
+
+typedef struct {
+	char *base;
+	char *parser_cursor;
+	tkid_t root;
 } cevil_expr;
+
+static tkid_t tk_storage_alloc(tk_storage *stg) {
+	stg->len++;
+
+	if (stg->len > stg->capacity) {
+		if (stg->capacity == 0)
+			stg->capacity = 128;
+
+		stg->capacity *= 2;
+		stg->arr = realloc(stg->arr, sizeof(*stg) * stg->capacity);
+		assert(stg->arr != NULL);
+	}
+
+	return stg->len - 1;
+}
+
+static cevil_tk *tk_storage_get(tk_storage stg, tkid_t index) {
+	assert(index < stg.len);
+
+	return &stg.arr[index];
+}
+
+static void tk_storage_free(tk_storage *stg) {
+	free(stg->arr);
+	stg->len = 0;
+	stg->capacity = 0;
+}
 
 void chop(char **str) {
 	while(**str != '\0' && isspace(**str))
 		(*str)++;
 }
 
-cevil_tk* next_tk(cevil_expr *expr) {
+tkid_t next_tk(cevil_expr *expr, tk_storage *stg) {
+	tkid_t tk_id = tk_storage_alloc(stg);
+	cevil_tk *tk = tk_storage_get(*stg, tk_id);
+	tk->evaluated = false;
 
-	cevil_tk *tk = malloc(sizeof(*tk));
+	char* end;
 
-	char* end = expr->base + strlen(expr->base);
+	double value = strtod(expr->parser_cursor, &end);
 
-	double value = strtod(expr->base, &end);
-
-	if (end != expr->base) {
+	if (end != expr->parser_cursor) {
 		tk->type = CEVIL_NUM_TK;
 		tk->as.number = value;
-		expr->base = end;
-	} else if (*expr->base == '+') {
+		expr->parser_cursor = end;
+	} else if (*expr->parser_cursor == '+') {
 		tk->type = CEVIL_PLUS_TK;
 		tk->as.rhs = expr->root;
-		expr->base++;
-		tk->as.lhs = next_tk(expr);
-	} else if (*expr->base == '-') {
+		expr->parser_cursor++;
+		tk->as.lhs = next_tk(expr, stg);
+	} else if (*expr->parser_cursor == '-') {
 		tk->type = CEVIL_MINUS_TK;
 		tk->as.rhs = expr->root;
-		expr->base++;
-		tk->as.lhs = next_tk(expr);
-	} else if (*expr->base == '*') {
+		expr->parser_cursor++;
+		tk->as.lhs = next_tk(expr, stg);
+	} else if (*expr->parser_cursor == '*') {
 		tk->type = CEVIL_MULT_TK;
 		tk->as.rhs = expr->root;
-		expr->base++;
-		tk->as.lhs = next_tk(expr);
-	} else if (*expr->base == '/') {
+		expr->parser_cursor++;
+		tk->as.lhs = next_tk(expr, stg);
+	} else if (*expr->parser_cursor == '/') {
 		tk->type = CEVIL_DIV_TK;
 		tk->as.rhs = expr->root;
-		expr->base++;
-		tk->as.lhs = next_tk(expr);
+		expr->parser_cursor++;
+		tk->as.lhs = next_tk(expr, stg);
 	} else {
 		fprintf(stderr, "error: Unexpected charcter '%c'\n", *expr->base);
 		exit(-1);
 	}
 
-	return tk;
+	return tk_id;
 }
 
-void eval(cevil_tk *root) {
-	if (root == NULL)
-		return;
+void eval(tkid_t root_id, tk_storage stg) {
+	cevil_tk* root = tk_storage_get(stg, root_id);
+
+	cevil_tk *rhs = NULL;
+	cevil_tk *lhs = NULL;
 
 	switch(root->type) {
 	case CEVIL_NUM_TK:
@@ -96,44 +135,60 @@ void eval(cevil_tk *root) {
 		root->value = root->as.number;
 		break;
 	case CEVIL_PLUS_TK:
-		eval(root->as.rhs);
-		eval(root->as.lhs);
-		root->evaluated = root->as.rhs && root->as.lhs;
+		rhs = tk_storage_get(stg, root->as.rhs);
+		lhs = tk_storage_get(stg, root->as.lhs);
+
+		eval(root->as.rhs, stg);
+		eval(root->as.lhs, stg);
+
+		root->evaluated = rhs->evaluated && lhs->evaluated;
 
 		if (!root->evaluated)
 			return;
 
-		root->value = root->as.rhs->value + root->as.lhs->value;
+		root->value = rhs->value + lhs->value;
 		break;
 	case CEVIL_MINUS_TK:
-		eval(root->as.rhs);
-		eval(root->as.lhs);
-		root->evaluated = root->as.rhs && root->as.lhs;
+		rhs = tk_storage_get(stg, root->as.rhs);
+		lhs = tk_storage_get(stg, root->as.lhs);
+
+		eval(root->as.rhs, stg);
+		eval(root->as.lhs, stg);
+
+		root->evaluated = rhs->evaluated && lhs->evaluated;
 
 		if (!root->evaluated)
 			return;
 
-		root->value = root->as.rhs->value - root->as.lhs->value;
+		root->value = rhs->value - lhs->value;
 		break;
 	case CEVIL_MULT_TK:
-		eval(root->as.rhs);
-		eval(root->as.lhs);
-		root->evaluated = root->as.rhs && root->as.lhs;
+		rhs = tk_storage_get(stg, root->as.rhs);
+		lhs = tk_storage_get(stg, root->as.lhs);
+
+		eval(root->as.rhs, stg);
+		eval(root->as.lhs, stg);
+
+		root->evaluated = rhs->evaluated && lhs->evaluated;
 
 		if (!root->evaluated)
 			return;
 
-		root->value = root->as.rhs->value * root->as.lhs->value;
+		root->value = rhs->value * lhs->value;
 		break;
 	case CEVIL_DIV_TK:
-		eval(root->as.rhs);
-		eval(root->as.lhs);
-		root->evaluated = root->as.rhs && root->as.lhs;
+		rhs = tk_storage_get(stg, root->as.rhs);
+		lhs = tk_storage_get(stg, root->as.lhs);
+
+		eval(root->as.rhs, stg);
+		eval(root->as.lhs, stg);
+
+		root->evaluated = rhs->evaluated && lhs->evaluated;
 
 		if (!root->evaluated)
 			return;
 
-		root->value = root->as.rhs->value / root->as.lhs->value;
+		root->value =rhs->value / lhs->value;
 		break;
 	default:
 		assert(false && "Unreachable");
@@ -142,26 +197,36 @@ void eval(cevil_tk *root) {
 }
 
 double cevil_eval(char *input) {
-	cevil_expr expr;
+	cevil_expr expr = {0};
 
 	expr.base = calloc(sizeof(*input), strlen(input) + 1);
 	memcpy(expr.base, input, strlen(input) * sizeof(*input));
+	expr.parser_cursor = expr.base;
 
-	chop(&expr.base);
-	while (*expr.base) {
-		expr.root = next_tk(&expr);
-		chop(&expr.base);
+	tk_storage stg = {0};
+
+	chop(&expr.parser_cursor);
+	while (*expr.parser_cursor != '\0') {
+		expr.root = next_tk(&expr, &stg);
+		chop(&expr.parser_cursor);
 	}
 
-	eval(expr.root);
+	eval(expr.root, stg);
 
-	if (expr.root->evaluated == false) {
-		fprintf(stderr, "error: Could not evaluate expression \"%s\" \n",
+	cevil_tk* root = tk_storage_get(stg, expr.root);
+
+	if (root->evaluated == false) {
+		fprintf(stderr, "Could not evaluate expression \"%s\" \n",
 			input);
 		exit(-1);
 	}
 
-	return expr.root->value;
+	double value = root->value;
+
+	tk_storage_free(&stg);
+	free(expr.base);
+
+	return value;
 }
 
 #endif // CEVIL_IMPLEMENTATION
