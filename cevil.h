@@ -47,10 +47,6 @@ void chop(char **str) {
 }
 
 cevil_tk* next_tk(cevil_expr *expr) {
-	chop(&expr->base);
-
-	if (*expr->base == '\0')
-		return NULL;
 
 	cevil_tk *tk = malloc(sizeof(*tk));
 
@@ -151,12 +147,10 @@ double cevil_eval(char *input) {
 	expr.base = calloc(sizeof(*input), strlen(input) + 1);
 	memcpy(expr.base, input, strlen(input) * sizeof(*input));
 
-	expr.root = NULL;
+	chop(&expr.base);
 	while (*expr.base) {
-		cevil_tk *tk = next_tk(&expr);
-		if (tk == NULL)
-			break;
-		expr.root = tk;
+		expr.root = next_tk(&expr);
+		chop(&expr.base);
 	}
 
 	eval(expr.root);
