@@ -77,6 +77,21 @@ static void tk_storage_free(tk_storage *stg) {
 	stg->capacity = 0;
 }
 
+static void cevil_expr_init(cevil_expr *expr, const char *str) {
+	memset(expr, 0, sizeof(*expr));
+
+	expr->base = calloc(sizeof(*str), strlen(str) + 1);
+	assert(expr->base != NULL && "Buy more RAM LOL");
+	memcpy(expr->base, str, strlen(str) * sizeof(*str));
+
+	expr->parser_cursor = expr->base;
+}
+
+static void cevil_expr_free(cevil_expr *expr) {
+	free(expr->base);
+}
+
+
 void chop(char **str) {
 	while(**str != '\0' && isspace(**str))
 		(*str)++;
@@ -197,11 +212,8 @@ void eval(tkid_t root_id, tk_storage stg) {
 }
 
 double cevil_eval(char *input) {
-	cevil_expr expr = {0};
-
-	expr.base = calloc(sizeof(*input), strlen(input) + 1);
-	memcpy(expr.base, input, strlen(input) * sizeof(*input));
-	expr.parser_cursor = expr.base;
+	cevil_expr expr;
+	cevil_expr_init(&expr, input);
 
 	tk_storage stg = {0};
 
@@ -224,7 +236,7 @@ double cevil_eval(char *input) {
 	double value = root->value;
 
 	tk_storage_free(&stg);
-	free(expr.base);
+	cevil_expr_free(&expr);
 
 	return value;
 }
