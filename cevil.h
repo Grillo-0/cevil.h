@@ -1,7 +1,7 @@
 #ifndef CEVIL_H_
 #define CEVIL_H_
 
-double cevil_eval(char *expr);
+double cevil_eval(const char *expr);
 
 #endif // CEVIL_H_
 
@@ -45,8 +45,8 @@ typedef struct {
 } tk_storage;
 
 typedef struct {
-	char *base;
-	char *parser_cursor;
+	const char *base;
+	const char *parser_cursor;
 	tkid_t root;
 } cevil_expr;
 
@@ -80,19 +80,21 @@ static void tk_storage_free(tk_storage *stg) {
 static void cevil_expr_init(cevil_expr *expr, const char *str) {
 	memset(expr, 0, sizeof(*expr));
 
-	expr->base = calloc(sizeof(*str), strlen(str) + 1);
-	assert(expr->base != NULL && "Buy more RAM LOL");
-	memcpy(expr->base, str, strlen(str) * sizeof(*str));
 
+	char *ptr = calloc(sizeof(*str), strlen(str) + 1);
+	assert(ptr != NULL && "Buy more RAM LOL");
+	memcpy(ptr, str, strlen(str) * sizeof(*str));
+
+	expr->base = ptr;
 	expr->parser_cursor = expr->base;
 }
 
 static void cevil_expr_free(cevil_expr *expr) {
-	free(expr->base);
+	free((char*)expr->base);
 }
 
 
-void chop(char **str) {
+void chop(const char **str) {
 	while(**str != '\0' && isspace(**str))
 		(*str)++;
 }
@@ -211,7 +213,7 @@ void eval(tkid_t root_id, tk_storage stg) {
 	}
 }
 
-double cevil_eval(char *input) {
+double cevil_eval(const char *input) {
 	cevil_expr expr;
 	cevil_expr_init(&expr, input);
 
