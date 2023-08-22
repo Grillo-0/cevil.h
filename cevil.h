@@ -48,6 +48,7 @@ typedef struct {
 	const char *base;
 	const char *parser_cursor;
 	tkid_t root;
+	tk_storage stg;
 } cevil_expr;
 
 static tkid_t tk_storage_alloc(tk_storage *stg) {
@@ -91,6 +92,7 @@ static void cevil_expr_init(cevil_expr *expr, const char *str) {
 
 static void cevil_expr_free(cevil_expr *expr) {
 	free((char*)expr->base);
+	tk_storage_free(&expr->stg);
 }
 
 
@@ -99,9 +101,9 @@ void chop(const char **str) {
 		(*str)++;
 }
 
-tkid_t next_tk(cevil_expr *expr, tk_storage *stg) {
-	tkid_t tk_id = tk_storage_alloc(stg);
-	cevil_tk *tk = tk_storage_get(*stg, tk_id);
+tkid_t next_tk(cevil_expr *expr) {
+	tkid_t tk_id = tk_storage_alloc(&expr->stg);
+	cevil_tk *tk = tk_storage_get(expr->stg, tk_id);
 	tk->evaluated = false;
 
 	char* end;
@@ -116,22 +118,22 @@ tkid_t next_tk(cevil_expr *expr, tk_storage *stg) {
 		tk->type = CEVIL_PLUS_TK;
 		tk->as.rhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.lhs = next_tk(expr, stg);
+		tk->as.lhs = next_tk(expr);
 	} else if (*expr->parser_cursor == '-') {
 		tk->type = CEVIL_MINUS_TK;
 		tk->as.rhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.lhs = next_tk(expr, stg);
+		tk->as.lhs = next_tk(expr);
 	} else if (*expr->parser_cursor == '*') {
 		tk->type = CEVIL_MULT_TK;
 		tk->as.rhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.lhs = next_tk(expr, stg);
+		tk->as.lhs = next_tk(expr);
 	} else if (*expr->parser_cursor == '/') {
 		tk->type = CEVIL_DIV_TK;
 		tk->as.rhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.lhs = next_tk(expr, stg);
+		tk->as.lhs = next_tk(expr);
 	} else {
 		fprintf(stderr, "error: Unexpected charcter '%c'\n", *expr->base);
 		exit(-1);
@@ -217,17 +219,15 @@ double cevil_eval(const char *input) {
 	cevil_expr expr;
 	cevil_expr_init(&expr, input);
 
-	tk_storage stg = {0};
-
 	chop(&expr.parser_cursor);
 	while (*expr.parser_cursor != '\0') {
-		expr.root = next_tk(&expr, &stg);
+		expr.root = next_tk(&expr);
 		chop(&expr.parser_cursor);
 	}
 
-	eval(expr.root, stg);
+	eval(expr.root, expr.stg);
 
-	cevil_tk* root = tk_storage_get(stg, expr.root);
+	cevil_tk* root = tk_storage_get(expr.stg, expr.root);
 
 	if (root->evaluated == false) {
 		fprintf(stderr, "Could not evaluate expression \"%s\" \n",
@@ -237,7 +237,6 @@ double cevil_eval(const char *input) {
 
 	double value = root->value;
 
-	tk_storage_free(&stg);
 	cevil_expr_free(&expr);
 
 	return value;
