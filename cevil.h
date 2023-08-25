@@ -31,27 +31,27 @@ typedef union {
 	};
 } cevil_as;
 
-typedef struct cevil_tk {
+struct cevil_tk {
 	enum cevil_tk_type type;
 	cevil_as as;
 	bool evaluated;
 	double value;
-} cevil_tk;
+};
 
-typedef struct {
-	cevil_tk *arr;
+struct tk_storage {
+	struct cevil_tk *arr;
 	size_t len;
 	size_t capacity;
-} tk_storage;
+};
 
-typedef struct {
+struct cevil_expr {
 	const char *base;
 	const char *parser_cursor;
 	tkid_t root;
-	tk_storage stg;
-} cevil_expr;
+	struct tk_storage stg;
+};
 
-static tkid_t tk_storage_alloc(tk_storage *stg) {
+static tkid_t tk_storage_alloc(struct tk_storage *stg) {
 	stg->len++;
 
 	if (stg->len > stg->capacity) {
@@ -66,19 +66,19 @@ static tkid_t tk_storage_alloc(tk_storage *stg) {
 	return stg->len - 1;
 }
 
-static cevil_tk *tk_storage_get(tk_storage stg, tkid_t index) {
+static struct cevil_tk* tk_storage_get(struct tk_storage stg, tkid_t index) {
 	assert(index < stg.len);
 
 	return &stg.arr[index];
 }
 
-static void tk_storage_free(tk_storage *stg) {
+static void tk_storage_free(struct tk_storage *stg) {
 	free(stg->arr);
 	stg->len = 0;
 	stg->capacity = 0;
 }
 
-static void cevil_expr_init(cevil_expr *expr, const char *str) {
+static void cevil_expr_init(struct cevil_expr *expr, const char *str) {
 	memset(expr, 0, sizeof(*expr));
 
 
@@ -90,7 +90,7 @@ static void cevil_expr_init(cevil_expr *expr, const char *str) {
 	expr->parser_cursor = expr->base;
 }
 
-static void cevil_expr_free(cevil_expr *expr) {
+static void cevil_expr_free(struct cevil_expr *expr) {
 	free((char*)expr->base);
 	tk_storage_free(&expr->stg);
 }
@@ -101,9 +101,9 @@ void chop(const char **str) {
 		(*str)++;
 }
 
-tkid_t next_tk(cevil_expr *expr) {
+tkid_t next_tk(struct cevil_expr *expr) {
 	tkid_t tk_id = tk_storage_alloc(&expr->stg);
-	cevil_tk *tk = tk_storage_get(expr->stg, tk_id);
+	struct cevil_tk *tk = tk_storage_get(expr->stg, tk_id);
 	tk->evaluated = false;
 
 	char* end;
@@ -142,11 +142,11 @@ tkid_t next_tk(cevil_expr *expr) {
 	return tk_id;
 }
 
-void eval(tkid_t root_id, tk_storage stg) {
-	cevil_tk* root = tk_storage_get(stg, root_id);
+void eval(tkid_t root_id, struct tk_storage stg) {
+	struct cevil_tk *root = tk_storage_get(stg, root_id);
 
-	cevil_tk *rhs = NULL;
-	cevil_tk *lhs = NULL;
+	struct cevil_tk *rhs = NULL;
+	struct cevil_tk *lhs = NULL;
 
 	switch(root->type) {
 	case CEVIL_NUM_TK:
@@ -216,7 +216,7 @@ void eval(tkid_t root_id, tk_storage stg) {
 }
 
 double cevil_eval(const char *input) {
-	cevil_expr expr;
+	struct cevil_expr expr;
 	cevil_expr_init(&expr, input);
 
 	chop(&expr.parser_cursor);
@@ -227,7 +227,7 @@ double cevil_eval(const char *input) {
 
 	eval(expr.root, expr.stg);
 
-	cevil_tk* root = tk_storage_get(expr.stg, expr.root);
+	struct cevil_tk *root = tk_storage_get(expr.stg, expr.root);
 
 	if (root->evaluated == false) {
 		fprintf(stderr, "Could not evaluate expression \"%s\" \n",
