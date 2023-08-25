@@ -116,24 +116,24 @@ tkid_t next_tk(struct cevil_expr *expr) {
 		expr->parser_cursor = end;
 	} else if (*expr->parser_cursor == '+') {
 		tk->type = CEVIL_PLUS_TK;
-		tk->as.rhs = expr->root;
+		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.lhs = next_tk(expr);
+		tk->as.rhs = next_tk(expr);
 	} else if (*expr->parser_cursor == '-') {
 		tk->type = CEVIL_MINUS_TK;
-		tk->as.rhs = expr->root;
+		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.lhs = next_tk(expr);
+		tk->as.rhs = next_tk(expr);
 	} else if (*expr->parser_cursor == '*') {
 		tk->type = CEVIL_MULT_TK;
-		tk->as.rhs = expr->root;
+		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.lhs = next_tk(expr);
+		tk->as.rhs = next_tk(expr);
 	} else if (*expr->parser_cursor == '/') {
 		tk->type = CEVIL_DIV_TK;
-		tk->as.rhs = expr->root;
+		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.lhs = next_tk(expr);
+		tk->as.rhs = next_tk(expr);
 	} else {
 		fprintf(stderr, "error: Unexpected charcter '%c'\n", *expr->base);
 		exit(-1);
@@ -160,12 +160,12 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 		eval(root->as.rhs, stg);
 		eval(root->as.lhs, stg);
 
-		root->evaluated = rhs->evaluated && lhs->evaluated;
+		root->evaluated = lhs->evaluated && rhs->evaluated;
 
 		if (!root->evaluated)
 			return;
 
-		root->value = rhs->value + lhs->value;
+		root->value = lhs->value + rhs->value;
 		break;
 	case CEVIL_MINUS_TK:
 		rhs = tk_storage_get(stg, root->as.rhs);
@@ -174,12 +174,12 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 		eval(root->as.rhs, stg);
 		eval(root->as.lhs, stg);
 
-		root->evaluated = rhs->evaluated && lhs->evaluated;
+		root->evaluated = lhs->evaluated && rhs->evaluated;
 
 		if (!root->evaluated)
 			return;
 
-		root->value = rhs->value - lhs->value;
+		root->value = lhs->value - rhs->value;
 		break;
 	case CEVIL_MULT_TK:
 		rhs = tk_storage_get(stg, root->as.rhs);
@@ -188,12 +188,12 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 		eval(root->as.rhs, stg);
 		eval(root->as.lhs, stg);
 
-		root->evaluated = rhs->evaluated && lhs->evaluated;
+		root->evaluated = lhs->evaluated && rhs->evaluated;
 
 		if (!root->evaluated)
 			return;
 
-		root->value = rhs->value * lhs->value;
+		root->value = lhs->value * rhs->value;
 		break;
 	case CEVIL_DIV_TK:
 		rhs = tk_storage_get(stg, root->as.rhs);
@@ -202,12 +202,12 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 		eval(root->as.rhs, stg);
 		eval(root->as.lhs, stg);
 
-		root->evaluated = rhs->evaluated && lhs->evaluated;
+		root->evaluated = lhs->evaluated && rhs->evaluated;
 
 		if (!root->evaluated)
 			return;
 
-		root->value =rhs->value / lhs->value;
+		root->value = lhs->value / rhs->value;
 		break;
 	default:
 		assert(false && "Unreachable");
