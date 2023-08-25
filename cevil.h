@@ -1,7 +1,20 @@
 #ifndef CEVIL_H_
 #define CEVIL_H_
 
-double cevil_eval(const char *expr);
+#define CEVIL_ERROR_BUF_SIZE 256
+
+struct cevil_error {
+	enum {
+		CEVIL_ERROK,
+		CEVIL_ERRPAR,
+		CEVIL_ERREVAL,
+		CEVIL_ERRGEN,
+	} type;
+	char msg[CEVIL_ERROR_BUF_SIZE];
+};
+
+struct cevil_error cevil_eval(const char *expr, double *result);
+void cevil_print_error(struct cevil_error *err);
 
 #endif // CEVIL_H_
 
@@ -10,6 +23,8 @@ double cevil_eval(const char *expr);
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define cevil_ok (struct cevil_error){.type = CEVIL_ERROK}
 
 typedef size_t tkid_t;
 
@@ -50,6 +65,25 @@ struct cevil_expr {
 	tkid_t root;
 	struct tk_storage stg;
 };
+
+void cevil_print_error(struct cevil_error *err) {
+	switch (err->type) {
+	case CEVIL_ERROK:
+		fprintf(stderr, "No error\n");
+		break;
+	case CEVIL_ERRPAR:
+		fprintf(stderr, "Parser error:");
+		break;
+	case CEVIL_ERREVAL:
+		fprintf(stderr, "Eval error:");
+		break;
+	case CEVIL_ERRGEN:
+		fprintf(stderr, "Generic error:");
+		break;
+	}
+
+	fprintf(stderr, "%*.s\n", CEVIL_ERROR_BUF_SIZE - 1, err->msg);
+}
 
 static tkid_t tk_storage_alloc(struct tk_storage *stg) {
 	stg->len++;
@@ -95,15 +129,14 @@ static void cevil_expr_free(struct cevil_expr *expr) {
 	tk_storage_free(&expr->stg);
 }
 
-
 void chop(const char **str) {
 	while(**str != '\0' && isspace(**str))
 		(*str)++;
 }
 
-tkid_t next_tk(struct cevil_expr *expr) {
-	tkid_t tk_id = tk_storage_alloc(&expr->stg);
-	struct cevil_tk *tk = tk_storage_get(expr->stg, tk_id);
+struct cevil_error next_tk(struct cevil_expr *expr, tkid_t *tk_id) {
+	*tk_id = tk_storage_alloc(&expr->stg);
+	struct cevil_tk *tk = tk_storage_get(expr->stg, *tk_id);
 	tk->evaluated = false;
 
 	char* end;
@@ -118,28 +151,46 @@ tkid_t next_tk(struct cevil_expr *expr) {
 		tk->type = CEVIL_PLUS_TK;
 		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.rhs = next_tk(expr);
+
+		struct cevil_error err;
+		err = next_tk(expr, &tk->as.rhs);
+		if (err.type != CEVIL_ERROK)
+			return err;
 	} else if (*expr->parser_cursor == '-') {
 		tk->type = CEVIL_MINUS_TK;
 		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.rhs = next_tk(expr);
+
+		struct cevil_error err;
+		err = next_tk(expr, &tk->as.rhs);
+		if (err.type != CEVIL_ERROK)
+			return err;
 	} else if (*expr->parser_cursor == '*') {
 		tk->type = CEVIL_MULT_TK;
 		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.rhs = next_tk(expr);
+
+		struct cevil_error err;
+		err = next_tk(expr, &tk->as.rhs);
+		if (err.type != CEVIL_ERROK)
+			return err;
 	} else if (*expr->parser_cursor == '/') {
 		tk->type = CEVIL_DIV_TK;
 		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-		tk->as.rhs = next_tk(expr);
+
+		struct cevil_error err;
+		err = next_tk(expr, &tk->as.rhs);
+		if (err.type != CEVIL_ERROK)
+			return err;
 	} else {
-		fprintf(stderr, "error: Unexpected charcter '%c'\n", *expr->base);
-		exit(-1);
+		struct cevil_error err = {.type = CEVIL_ERRPAR};
+		snprintf(err.msg, CEVIL_ERROR_BUF_SIZE,
+			 "error: Unexpected charcter '%c'\n", *expr->base);
+		return err;
 	}
 
-	return tk_id;
+	return cevil_ok;
 }
 
 void eval(tkid_t root_id, struct tk_storage stg) {
@@ -148,7 +199,7 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 	struct cevil_tk *rhs = NULL;
 	struct cevil_tk *lhs = NULL;
 
-	switch(root->type) {
+	switch (root->type) {
 	case CEVIL_NUM_TK:
 		root->evaluated = true;
 		root->value = root->as.number;
@@ -215,13 +266,18 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 	}
 }
 
-double cevil_eval(const char *input) {
+struct cevil_error cevil_eval(const char *input, double *result) {
 	struct cevil_expr expr;
 	cevil_expr_init(&expr, input);
 
 	chop(&expr.parser_cursor);
 	while (*expr.parser_cursor != '\0') {
-		expr.root = next_tk(&expr);
+		struct cevil_error err;
+		tkid_t result;
+		err = next_tk(&expr, &result);
+		expr.root = result;
+		if (err.type != CEVIL_ERROK)
+			return err;
 		chop(&expr.parser_cursor);
 	}
 
@@ -230,16 +286,19 @@ double cevil_eval(const char *input) {
 	struct cevil_tk *root = tk_storage_get(expr.stg, expr.root);
 
 	if (root->evaluated == false) {
-		fprintf(stderr, "Could not evaluate expression \"%s\" \n",
-			input);
-		exit(-1);
+		struct cevil_error err = {.type = CEVIL_ERREVAL};
+		snprintf(err.msg, CEVIL_ERROR_BUF_SIZE,
+			 "Could not evaluate expression \"%s\" \n", input);
+		return err;
 	}
 
 	double value = root->value;
 
 	cevil_expr_free(&expr);
 
-	return value;
+	*result = value;
+
+	return cevil_ok;
 }
 
 #endif // CEVIL_IMPLEMENTATION
