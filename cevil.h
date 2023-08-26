@@ -34,6 +34,7 @@ enum cevil_tk_type {
 	CEVIL_MINUS_TK,
 	CEVIL_MULT_TK,
 	CEVIL_DIV_TK,
+	CEVIL_TK_SIZE,
 };
 
 struct cevil_tk;
@@ -134,6 +135,38 @@ void chop(const char **str) {
 		(*str)++;
 }
 
+static bool is_binary_op(enum cevil_tk_type tk) {
+	static bool is_binary_op_table[CEVIL_TK_SIZE] = {
+		[CEVIL_PLUS_TK] = true,
+		[CEVIL_MINUS_TK] = true,
+		[CEVIL_MULT_TK] = true,
+		[CEVIL_DIV_TK] = true,
+	};
+
+	return is_binary_op_table[tk];
+}
+
+/**
+ * Get the precedence value of an operation
+ * @tk: token to the precedence value
+ *
+ * Returns:
+ *
+ * Returns the precedence value or 0 if the token is not a operation.
+ * The bigger the number, the early the operation needs to be
+ * evaluated.
+ */
+static size_t precedence(enum cevil_tk_type tk) {
+	static size_t precedence_table[CEVIL_TK_SIZE] = {
+		[CEVIL_PLUS_TK] = 1,
+		[CEVIL_MINUS_TK] = 1,
+		[CEVIL_MULT_TK] = 2,
+		[CEVIL_DIV_TK] = 2,
+	};
+
+	return precedence_table[tk];
+}
+
 struct cevil_error next_tk(struct cevil_expr *expr, tkid_t *tk_id) {
 	*tk_id = tk_storage_alloc(&expr->stg);
 	struct cevil_tk *tk = tk_storage_get(expr->stg, *tk_id);
@@ -149,46 +182,42 @@ struct cevil_error next_tk(struct cevil_expr *expr, tkid_t *tk_id) {
 		expr->parser_cursor = end;
 	} else if (*expr->parser_cursor == '+') {
 		tk->type = CEVIL_PLUS_TK;
-		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-
-		struct cevil_error err;
-		err = next_tk(expr, &tk->as.rhs);
-		if (err.type != CEVIL_ERROK)
-			return err;
 	} else if (*expr->parser_cursor == '-') {
 		tk->type = CEVIL_MINUS_TK;
-		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-
-		struct cevil_error err;
-		err = next_tk(expr, &tk->as.rhs);
-		if (err.type != CEVIL_ERROK)
-			return err;
 	} else if (*expr->parser_cursor == '*') {
 		tk->type = CEVIL_MULT_TK;
-		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-
-		struct cevil_error err;
-		err = next_tk(expr, &tk->as.rhs);
-		if (err.type != CEVIL_ERROK)
-			return err;
 	} else if (*expr->parser_cursor == '/') {
 		tk->type = CEVIL_DIV_TK;
-		tk->as.lhs = expr->root;
 		expr->parser_cursor++;
-
-		struct cevil_error err;
-		err = next_tk(expr, &tk->as.rhs);
-		if (err.type != CEVIL_ERROK)
-			return err;
 	} else {
 		struct cevil_error err = {.type = CEVIL_ERRPAR};
 		snprintf(err.msg, CEVIL_ERROR_BUF_SIZE,
 			 "error: Unexpected charcter '%c'\n", *expr->base);
 		return err;
 	}
+
+	if (is_binary_op(tk->type)) {
+		struct cevil_error err;
+
+		err = next_tk(expr, &tk->as.rhs);
+
+		struct cevil_tk *root = tk_storage_get(expr->stg, expr->root);
+
+		if (is_binary_op(root->type) &&
+		    precedence(tk->type) > precedence(root->type)) {
+			tk->as.lhs = root->as.rhs;
+			root->as.rhs = *tk_id;
+			*tk_id = expr->root;
+		} else {
+			tk->as.lhs = expr->root;
+		}
+
+		if (err.type != CEVIL_ERROK)
+			return err;
+	};
 
 	return cevil_ok;
 }
@@ -260,6 +289,7 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 
 		root->value = lhs->value / rhs->value;
 		break;
+	case CEVIL_TK_SIZE:
 	default:
 		assert(false && "Unreachable");
 		break;
