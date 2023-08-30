@@ -169,7 +169,7 @@ static size_t precedence(enum cevil_tk_type tk) {
 	return precedence_table[tk];
 }
 
-struct cevil_error next_tk(struct cevil_expr *expr, tkid_t *tk_id) {
+struct cevil_error add_node_to_ast(struct cevil_expr *expr, tkid_t *tk_id) {
 	*tk_id = tk_storage_alloc(&expr->stg);
 	struct cevil_tk *tk = tk_storage_get(expr->stg, *tk_id);
 	tk->evaluated = false;
@@ -204,7 +204,7 @@ struct cevil_error next_tk(struct cevil_expr *expr, tkid_t *tk_id) {
 	if (is_binary_op(tk->type)) {
 		struct cevil_error err;
 
-		err = next_tk(expr, &tk->as.rhs);
+		err = add_node_to_ast(expr, &tk->as.rhs);
 
 		struct cevil_tk *root = tk_storage_get(expr->stg, expr->root);
 
@@ -306,7 +306,7 @@ struct cevil_error cevil_eval(const char *input, double *result) {
 	while (*expr.parser_cursor != '\0') {
 		struct cevil_error err;
 		tkid_t result;
-		err = next_tk(&expr, &result);
+		err = add_node_to_ast(&expr, &result);
 		expr.root = result;
 		if (err.type != CEVIL_ERROK)
 			return err;
