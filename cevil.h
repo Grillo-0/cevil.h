@@ -28,36 +28,34 @@ void cevil_print_error(struct cevil_error *err);
 
 #define cevil_ok (struct cevil_error){.type = CEVIL_ERROK}
 
-typedef size_t tkid_t;
+typedef size_t nodeid_t;
 
-enum cevil_tk_type {
-	CEVIL_NUM_TK,
-	CEVIL_PLUS_TK,
-	CEVIL_MINUS_TK,
-	CEVIL_MULT_TK,
-	CEVIL_DIV_TK,
-	CEVIL_TK_SIZE,
+enum cevil_node_type {
+	CEVIL_NUM_NODE,
+	CEVIL_PLUS_NODE,
+	CEVIL_MINUS_NODE,
+	CEVIL_MULT_NODE,
+	CEVIL_DIV_NODE,
+	CEVIL_NODE_SIZE,
 };
-
-struct cevil_tk;
 
 typedef union {
 	double number;
 	struct {
-		tkid_t rhs;
-		tkid_t lhs;
+		nodeid_t rhs;
+		nodeid_t lhs;
 	};
 } cevil_as;
 
-struct cevil_tk {
-	enum cevil_tk_type type;
+struct cevil_node {
+	enum cevil_node_type type;
 	cevil_as as;
 	bool evaluated;
 	double value;
 };
 
-struct tk_storage {
-	struct cevil_tk *arr;
+struct node_storage {
+	struct cevil_node *arr;
 	size_t len;
 	size_t capacity;
 };
@@ -65,8 +63,8 @@ struct tk_storage {
 struct cevil_expr {
 	const char *base;
 	const char *parser_cursor;
-	tkid_t root;
-	struct tk_storage stg;
+	nodeid_t root;
+	struct node_storage stg;
 };
 
 void cevil_print_error(struct cevil_error *err) {
@@ -88,7 +86,7 @@ void cevil_print_error(struct cevil_error *err) {
 	fprintf(stderr, "%*.s\n", CEVIL_ERROR_BUF_SIZE - 1, err->msg);
 }
 
-static tkid_t tk_storage_alloc(struct tk_storage *stg) {
+static nodeid_t node_storage_alloc(struct node_storage *stg) {
 	stg->len++;
 
 	if (stg->len > stg->capacity) {
@@ -103,13 +101,13 @@ static tkid_t tk_storage_alloc(struct tk_storage *stg) {
 	return stg->len - 1;
 }
 
-static struct cevil_tk* tk_storage_get(struct tk_storage stg, tkid_t index) {
+static struct cevil_node* node_storage_get(struct node_storage stg, nodeid_t index) {
 	assert(index < stg.len);
 
 	return &stg.arr[index];
 }
 
-static void tk_storage_free(struct tk_storage *stg) {
+static void node_storage_free(struct node_storage *stg) {
 	free(stg->arr);
 	stg->len = 0;
 	stg->capacity = 0;
@@ -129,7 +127,7 @@ static void cevil_expr_init(struct cevil_expr *expr, const char *str) {
 
 static void cevil_expr_free(struct cevil_expr *expr) {
 	free((char*)expr->base);
-	tk_storage_free(&expr->stg);
+	node_storage_free(&expr->stg);
 }
 
 void chop(const char **str) {
@@ -137,20 +135,20 @@ void chop(const char **str) {
 		(*str)++;
 }
 
-static bool is_binary_op(enum cevil_tk_type tk) {
-	static bool is_binary_op_table[CEVIL_TK_SIZE] = {
-		[CEVIL_PLUS_TK] = true,
-		[CEVIL_MINUS_TK] = true,
-		[CEVIL_MULT_TK] = true,
-		[CEVIL_DIV_TK] = true,
+static bool is_binary_op(enum cevil_node_type node) {
+	static bool is_binary_op_table[CEVIL_NODE_SIZE] = {
+		[CEVIL_PLUS_NODE] = true,
+		[CEVIL_MINUS_NODE] = true,
+		[CEVIL_MULT_NODE] = true,
+		[CEVIL_DIV_NODE] = true,
 	};
 
-	return is_binary_op_table[tk];
+	return is_binary_op_table[node];
 }
 
 /**
  * Get the precedence value of an operation
- * @tk: token to the precedence value
+ * @node: token to the precedence value
  *
  * Returns:
  *
@@ -158,41 +156,41 @@ static bool is_binary_op(enum cevil_tk_type tk) {
  * The bigger the number, the early the operation needs to be
  * evaluated.
  */
-static size_t precedence(enum cevil_tk_type tk) {
-	static size_t precedence_table[CEVIL_TK_SIZE] = {
-		[CEVIL_PLUS_TK] = 1,
-		[CEVIL_MINUS_TK] = 1,
-		[CEVIL_MULT_TK] = 2,
-		[CEVIL_DIV_TK] = 2,
+static size_t precedence(enum cevil_node_type node) {
+	static size_t precedence_table[CEVIL_NODE_SIZE] = {
+		[CEVIL_PLUS_NODE] = 1,
+		[CEVIL_MINUS_NODE] = 1,
+		[CEVIL_MULT_NODE] = 2,
+		[CEVIL_DIV_NODE] = 2,
 	};
 
-	return precedence_table[tk];
+	return precedence_table[node];
 }
 
-struct cevil_error add_node_to_ast(struct cevil_expr *expr, tkid_t *tk_id) {
-	*tk_id = tk_storage_alloc(&expr->stg);
-	struct cevil_tk *tk = tk_storage_get(expr->stg, *tk_id);
-	tk->evaluated = false;
+struct cevil_error add_node_to_ast(struct cevil_expr *expr, nodeid_t *node_id) {
+	*node_id = node_storage_alloc(&expr->stg);
+	struct cevil_node *node = node_storage_get(expr->stg, *node_id);
+	node->evaluated = false;
 
 	char* end;
 
 	double value = strtod(expr->parser_cursor, &end);
 
 	if (end != expr->parser_cursor) {
-		tk->type = CEVIL_NUM_TK;
-		tk->as.number = value;
+		node->type = CEVIL_NUM_NODE;
+		node->as.number = value;
 		expr->parser_cursor = end;
 	} else if (*expr->parser_cursor == '+') {
-		tk->type = CEVIL_PLUS_TK;
+		node->type = CEVIL_PLUS_NODE;
 		expr->parser_cursor++;
 	} else if (*expr->parser_cursor == '-') {
-		tk->type = CEVIL_MINUS_TK;
+		node->type = CEVIL_MINUS_NODE;
 		expr->parser_cursor++;
 	} else if (*expr->parser_cursor == '*') {
-		tk->type = CEVIL_MULT_TK;
+		node->type = CEVIL_MULT_NODE;
 		expr->parser_cursor++;
 	} else if (*expr->parser_cursor == '/') {
-		tk->type = CEVIL_DIV_TK;
+		node->type = CEVIL_DIV_NODE;
 		expr->parser_cursor++;
 	} else {
 		struct cevil_error err = {.type = CEVIL_ERRPAR};
@@ -201,20 +199,20 @@ struct cevil_error add_node_to_ast(struct cevil_expr *expr, tkid_t *tk_id) {
 		return err;
 	}
 
-	if (is_binary_op(tk->type)) {
+	if (is_binary_op(node->type)) {
 		struct cevil_error err;
 
-		err = add_node_to_ast(expr, &tk->as.rhs);
+		err = add_node_to_ast(expr, &node->as.rhs);
 
-		struct cevil_tk *root = tk_storage_get(expr->stg, expr->root);
+		struct cevil_node *root = node_storage_get(expr->stg, expr->root);
 
 		if (is_binary_op(root->type) &&
-		    precedence(tk->type) > precedence(root->type)) {
-			tk->as.lhs = root->as.rhs;
-			root->as.rhs = *tk_id;
-			*tk_id = expr->root;
+		    precedence(node->type) > precedence(root->type)) {
+			node->as.lhs = root->as.rhs;
+			root->as.rhs = *node_id;
+			*node_id = expr->root;
 		} else {
-			tk->as.lhs = expr->root;
+			node->as.lhs = expr->root;
 		}
 
 		if (err.type != CEVIL_ERROK)
@@ -224,20 +222,20 @@ struct cevil_error add_node_to_ast(struct cevil_expr *expr, tkid_t *tk_id) {
 	return cevil_ok;
 }
 
-void eval(tkid_t root_id, struct tk_storage stg) {
-	struct cevil_tk *root = tk_storage_get(stg, root_id);
+void eval(nodeid_t root_id, struct node_storage stg) {
+	struct cevil_node *root = node_storage_get(stg, root_id);
 
-	struct cevil_tk *rhs = NULL;
-	struct cevil_tk *lhs = NULL;
+	struct cevil_node *rhs = NULL;
+	struct cevil_node *lhs = NULL;
 
 	switch (root->type) {
-	case CEVIL_NUM_TK:
+	case CEVIL_NUM_NODE:
 		root->evaluated = true;
 		root->value = root->as.number;
 		break;
-	case CEVIL_PLUS_TK:
-		rhs = tk_storage_get(stg, root->as.rhs);
-		lhs = tk_storage_get(stg, root->as.lhs);
+	case CEVIL_PLUS_NODE:
+		rhs = node_storage_get(stg, root->as.rhs);
+		lhs = node_storage_get(stg, root->as.lhs);
 
 		eval(root->as.rhs, stg);
 		eval(root->as.lhs, stg);
@@ -249,9 +247,9 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 
 		root->value = lhs->value + rhs->value;
 		break;
-	case CEVIL_MINUS_TK:
-		rhs = tk_storage_get(stg, root->as.rhs);
-		lhs = tk_storage_get(stg, root->as.lhs);
+	case CEVIL_MINUS_NODE:
+		rhs = node_storage_get(stg, root->as.rhs);
+		lhs = node_storage_get(stg, root->as.lhs);
 
 		eval(root->as.rhs, stg);
 		eval(root->as.lhs, stg);
@@ -263,9 +261,9 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 
 		root->value = lhs->value - rhs->value;
 		break;
-	case CEVIL_MULT_TK:
-		rhs = tk_storage_get(stg, root->as.rhs);
-		lhs = tk_storage_get(stg, root->as.lhs);
+	case CEVIL_MULT_NODE:
+		rhs = node_storage_get(stg, root->as.rhs);
+		lhs = node_storage_get(stg, root->as.lhs);
 
 		eval(root->as.rhs, stg);
 		eval(root->as.lhs, stg);
@@ -277,9 +275,9 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 
 		root->value = lhs->value * rhs->value;
 		break;
-	case CEVIL_DIV_TK:
-		rhs = tk_storage_get(stg, root->as.rhs);
-		lhs = tk_storage_get(stg, root->as.lhs);
+	case CEVIL_DIV_NODE:
+		rhs = node_storage_get(stg, root->as.rhs);
+		lhs = node_storage_get(stg, root->as.lhs);
 
 		eval(root->as.rhs, stg);
 		eval(root->as.lhs, stg);
@@ -291,7 +289,7 @@ void eval(tkid_t root_id, struct tk_storage stg) {
 
 		root->value = lhs->value / rhs->value;
 		break;
-	case CEVIL_TK_SIZE:
+	case CEVIL_NODE_SIZE:
 	default:
 		assert(false && "Unreachable");
 		break;
@@ -305,7 +303,7 @@ struct cevil_error cevil_eval(const char *input, double *result) {
 	chop(&expr.parser_cursor);
 	while (*expr.parser_cursor != '\0') {
 		struct cevil_error err;
-		tkid_t result;
+		nodeid_t result;
 		err = add_node_to_ast(&expr, &result);
 		expr.root = result;
 		if (err.type != CEVIL_ERROK)
@@ -315,7 +313,7 @@ struct cevil_error cevil_eval(const char *input, double *result) {
 
 	eval(expr.root, expr.stg);
 
-	struct cevil_tk *root = tk_storage_get(expr.stg, expr.root);
+	struct cevil_node *root = node_storage_get(expr.stg, expr.root);
 
 	if (root->evaluated == false) {
 		struct cevil_error err = {.type = CEVIL_ERREVAL};
