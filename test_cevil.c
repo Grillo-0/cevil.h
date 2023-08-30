@@ -1,6 +1,4 @@
-#include <assert.h>
 #include <stdio.h>
-#include <stdbool.h>
 
 #define CEVIL_IMPLEMENTATION
 #include "cevil.h"

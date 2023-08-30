@@ -20,7 +20,9 @@ void cevil_print_error(struct cevil_error *err);
 
 #ifdef CEVIL_IMPLEMENTATION
 
+#include <assert.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 
