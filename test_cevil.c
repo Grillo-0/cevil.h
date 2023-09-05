@@ -12,9 +12,10 @@ void test_pos(char* expr, double expected, const char* file, size_t line) {
 	err = cevil_eval(expr, &res);
 
 	if (err.type != CEVIL_ERROK) {
-		printf("[FAILED]");
+		printf("[FAILED]: ");
+		fflush(stdout);
 		cevil_print_error(&err);
-		exit(-1);
+		return;
 	}
 
 	if (res == expected) {
@@ -22,7 +23,6 @@ void test_pos(char* expr, double expected, const char* file, size_t line) {
 	}
 	else {
 		printf("[FAILED] %s:%zu: \"%s\" != %f (expected: %f)\n", file, line, expr, res, expected);
-		exit(-1);
 	}
 }
 
@@ -45,4 +45,6 @@ int main(void) {
 
 	test("2 / 1 * 2", 2 / 1 * 2);
 	test("1 * 2 / 2", 1 * 2 / 2);
+
+	test("19+21-2", 19+21-2);
 }
